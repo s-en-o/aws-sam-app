@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Unicorn Rentals - unicorn registry
+
+Globals:
+  Function:
+    Environment:
+      Variables:
+        DYNAMODB_TABLE: unicorns
+
+Resources:
+  UnicornBirthFunctionApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: UnicornBirthFunction Api Gateway
+      StageName: Prod
+      MinimumCompressionSize: 10485760
+
+  UnicornBirthStepFunction:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      Definition: Definition
+      DefinitionSubstitutions:
+        Key: Value
+      LoggingConfiguration: LoggingConfiguration
+      RoleArn: String
+      StateMachineName: String
+      StateMachineType: String
+      Tags:
+        - TagsEntry
+      TracingConfiguration: TracingConfiguration
+
+  DdbTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      TableName: unicorns
+
+  # UnicornBirthFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: unicorn-birth/
+  #     Handler: CREATE.lambda_handler
+  #     Runtime: python3.7
+  #     Policies:
+  #     - AmazonDynamoDBFullAccess
+  #     Events:
+  #       UnicornBirthFunctionApi:
+  #         Type: Api
+  #         Properties:
+  #           Path: /unicorn-birth
+  #           Method: POST
+  #           RestApiId: !Ref UnicornBirthFunctionApi
+
+  # FunctionVersion:
+  #   Type: AWS::Lambda::Version
+  #   Properties:
+  #     FunctionName: UnicornBirthFunction
+  #     ProvisionedConcurrencyConfig:
+  #       ProvisionedConcurrencyConfiguration: 20
+
+Outputs:
+  UnicornBirthFunctionApi:
+    Description: 'API Gateway endpoint URL for Prod stage for UnicornBirthFunction'
+    Value: !Sub 'https://${UnicornBirthFunctionApi}.execute-api.ap-southeast-2.amazonaws.com/Prod/unicorn-birth'
