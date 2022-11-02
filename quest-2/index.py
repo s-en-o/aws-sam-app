@@ -1,0 +1,135 @@
+import os
+import json
+from datetime import datetime
+
+import boto3
+
+dynamodb = boto3.resource('dynamodb')
+lambda_client = boto3.client('lambda')
+sfn = boto3.client('stepfunctions')
+
+unicorn_stable_table = dynamodb.Table(os.environ['DYNAMODB_STABLE'])
+feed_table = dynamodb.Table(os.environ['DYNAMODB_FEED_STORAGE'])
+feed_refill_function = os.environ['FEED_REFILL_FUNCTION']
+
+print(feed_refill_function)
+
+def check_unicorns_to_feed() -> list:
+  hungry_unicorns = []
+  unicorns = unicorn_stable_table.scan()
+  print(f"unicorns: {unicorns}")
+
+  for unicorn in unicorns['Items']:
+    time_now = datetime.now()
+    last_fed_time = datetime.strptime(unicorn['last_fed'], '%Y-%m-%d %H:%M:%S')
+
+    time_difference_minutes = ((time_now - last_fed_time).seconds / 60)
+
+    if (time_difference_minutes > int(unicorn['feed_interval'])):
+      print(f"It has been {int(time_difference_minutes)} minutes since {unicorn['name']} has been fed.")
+
+      unicorn['last_fed'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+      hungry_unicorns.append(unicorn)
+
+  return hungry_unicorns
+
+def feed_unicorns(unicorns_to_feed: list):
+  feed_required = 0
+  unicorn_fed = []
+
+  for unicorn in unicorns_to_feed:
+
+    print(f"Feeding unicorn {unicorn['name']}...")
+    unicorn_fed.append(unicorn['name'])
+    feed_response = unicorn_stable_table.update_item(
+      Key = {
+       'id': unicorn['id']
+      },
+      UpdateExpression = "SET last_fed = :feeding_time",
+      ExpressionAttributeValues = {
+        ':feeding_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+      }
+    )
+    feed_required += unicorn['feed_required']
+
+  print(f'Unicorns consumed {feed_required} kilograms of feed...')
+
+  #############################################################
+  ######## COMMENT THIS PART OUT WHEN WORKING ON MILESTONE 1!!!
+  feed_table_get = feed_table.get_item(TableName=os.environ['DYNAMODB_FEED_STORAGE'], Key={'id': 'Unicorn-Feed'})
+  new_feed_amount = int(feed_table_get['Item']['Amount']) - feed_required
+
+  feed_table_response = feed_table.update_item(
+    Key = {
+      'id': 'Unicorn-Feed'
+    },
+    UpdateExpression = "SET Amount = :feed_to_deduct",
+    ExpressionAttributeValues = {
+      ':feed_to_deduct': new_feed_amount
+    }
+  )
+  #############################################################
+  #############################################################
+  return unicorn_fed
+
+def lambda_handler(event, context):
+  unicorns_to_feed = check_unicorns_to_feed()
+
+  if (len(unicorns_to_feed) > 0):
+
+    #############################################################
+    ######## COMMENT THIS PART OUT WHEN WORKING ON MILESTONE 1!!!
+    response = feed_unicorns(unicorns_to_feed)
+    print('Unicorns fed: ' + str(response))
+    #############################################################
+    #############################################################
+
+    #############################################################
+    ########## UNCOMMENT AND MODIFY THIS PART WHEN WORKING ON MILESTONE 1!!!
+    # sfn_st = # PUT YOUR STATE MACHINE ARN HERE TO CONNECT THE FUNCTION TO IT!!!
+    # data = []
+    # feed_required = 0
+    # for unicorn in unicorns_to_feed:
+    #     obj = {}
+    #     obj["id"] = unicorn['id']
+    #     obj["last_fed"] = unicorn['last_fed']
+    #     data.append(obj)
+    #     feed = int(unicorn['feed_required'])
+    #     feed_required = feed_required + feed
+
+    # sfn_input = {}
+    # feed_storage = {}
+    # sfn_input["UnicornsToFeed"] = data
+    # feed_storage["feedId"] = "Unicorn-Feed"
+    # feed_storage["AmountToDeduct"] = feed_required
+    # sfn_input["FeedStorage"] = feed_storage
+    # sfn_input = json.dumps(sfn_input)
+
+    # start_execution_response = sfn.start_execution(
+    #     stateMachineArn=sfn_st,
+    #     input=sfn_input
+    # )
+    # response={}
+    # response['executionArn'] = start_execution_response['executionArn']
+    #############################################################
+    #############################################################
+
+  else:
+    print('No unicorns to feed at this time')
+    response = 'No unicorns to feed at this time'
+
+  #############################################################
+  #### COMMENT THIS PART OUT WHEN WORKING ON MILESTONE 1!!!
+  print('Executing unicorn feed level refill function.')
+
+  lambda_client.invoke(
+    FunctionName = feed_refill_function,
+    InvocationType = 'Event'
+  )
+  #############################################################
+  #############################################################
+
+  return {
+    'statusCode': 200,
+    'body': json.dumps(response)
+  }
